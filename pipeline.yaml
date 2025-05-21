@@ -1,0 +1,31 @@
+trigger:
+- master
+
+pool:
+  name: consoleapppool  # ✅ Your self-hosted Linux agent pool
+
+variables:
+  buildConfiguration: 'Release'
+  solution: '**/ConsoleApp.csproj'
+
+steps:
+
+- task: UseDotNet@2
+  displayName: 'Install .NET SDK'
+  inputs:
+    packageType: 'sdk'
+    version: '7.x'
+    installationPath: $(Agent.ToolsDirectory)/dotnet
+
+- task: DotNetCoreCLI@2
+  displayName: 'Restore dependencies'
+  inputs:
+    command: 'restore'
+    projects: '$(solution)'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Build project'
+  inputs:
+    command: 'build'
+    projects: '$(solution)'
+    arguments: '--configuration $(buildConfiguration)'
