@@ -103,8 +103,8 @@ stages:
           displayName: 'Build Docker Image'
           inputs:
             command: 'build'
-            dockerfile: msbuild_project1/ConsoleApp/ConsoleApp/Dockerfile
-            buildContext: msbuild_project1/ConsoleApp/ConsoleApp
+            dockerfile: 'ConsoleApp/ConsoleApp/Dockerfile'
+            buildContext: ConsoleApp/ConsoleApp
             tags: |
               $(dockerImageName):$(Build.BuildId)
 
