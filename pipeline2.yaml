@@ -1,0 +1,152 @@
+trigger:
+  branches:
+    include:
+      - master
+
+variables:
+  buildConfiguration: 'Release'
+  dockerImageName: 'consoleapp'
+  dockerHubRepo: 'docker630/consoleapp'  # <-- Change this
+  acrLoginServer: 'consoleappacr.azurecr.io'            # <-- Change this
+  acrRepo: 'consoleappacr.azurecr.io/consoleapp'       # <-- Change this
+
+stages:
+
+# 1. Restore
+- stage: Restore
+  displayName: 'Restore NuGet Packages'
+  jobs:
+    - job: Restore
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: '6.0.x'
+        - script: |
+            echo "Listing project files:"
+            find $(Build.SourcesDirectory) -name '*.csproj'
+          displayName: 'Find .csproj file'
+      
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore Packages'
+          inputs:
+            command: 'restore'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+
+# 2. Build
+- stage: Build
+  displayName: 'Build .NET App'
+  dependsOn: Restore
+  jobs:
+    - job: Build
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Build Solution'
+          inputs:
+            command: 'build'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+# 3. Test
+- stage: Test
+  displayName: 'Run Unit Tests'
+  dependsOn: Build
+  jobs:
+    - job: Test
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Run Tests'
+          inputs:
+            command: 'test'
+            projects: '**/*Tests.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+# 4. Publish Artifacts
+- stage: Publish
+  displayName: 'Publish Artifacts'
+  dependsOn: Test
+  jobs:
+    - job: Publish
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Publish App'
+          inputs:
+            command: 'publish'
+            publishWebProjects: false
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+            arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+
+        - task: PublishBuildArtifacts@1
+          inputs:
+            pathToPublish: '$(Build.ArtifactStagingDirectory)'
+            artifactName: 'consoleapp'
+
+# 5. Build Docker Image
+- stage: DockerBuild
+  displayName: 'Build Docker Image'
+  dependsOn: Publish
+  jobs:
+    - job: DockerBuild
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: Docker@2
+          displayName: 'Build Docker Image'
+          inputs:
+            command: 'build'
+            Dockerfile: '**/Dockerfile'
+            tags: |
+              $(dockerImageName):$(Build.BuildId)
+
+# 6. Push to Docker Hub
+- stage: PushDockerHub
+  displayName: 'Push Image to Docker Hub'
+  dependsOn: DockerBuild
+  jobs:
+    - job: DockerHubPush
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: Docker@2
+          displayName: 'Login to Docker Hub'
+          inputs:
+            command: 'login'
+            containerRegistry: 'dockersc1'  # <-- Create in Azure DevOps
+
+        - task: Docker@2
+          displayName: 'Push Image to Docker Hub'
+          inputs:
+            command: 'push'
+            tags: |
+              $(dockerHubRepo):$(Build.BuildId)
+
+# 7. Push to Azure Container Registry (ACR)
+- stage: PushACR
+  displayName: 'Push Image to ACR'
+  dependsOn: DockerBuild
+  jobs:
+    - job: ACRPush
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: Docker@2
+          displayName: 'Login to ACR'
+          inputs:
+            command: 'login'
+            containerRegistry: 'acrsc1'  # <-- Create in Azure DevOps
+
+        - task: Docker@2
+          displayName: 'Push Image to ACR'
+          inputs:
+            command: 'push'
+            tags: |
+              $(acrRepo):$(Build.BuildId)
