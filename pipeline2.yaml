@@ -7,8 +7,8 @@ variables:
   buildConfiguration: 'Release'
   dockerImageName: 'consoleapp'
   dockerHubRepo: 'docker630/consoleapp'  # <-- Change this
-  acrLoginServer: 'consoleappacr.azurecr.io'            # <-- Change this
-  acrRepo: 'consoleappacr.azurecr.io/consoleapp'       # <-- Change this
+  acrLoginServer: 'acregistry1.azurecr.io'            # <-- Change this
+  acrRepo: 'acregistry1.azurecr.io/consoleapp'       # <-- Change this
 
 stages:
 
@@ -89,6 +89,15 @@ stages:
           inputs:
             pathToPublish: '$(Build.ArtifactStagingDirectory)'
             artifactName: 'consoleapp'
+        - script: |
+            echo "Listing directory structure:"
+            find . -type f
+          displayName: 'Debug File Structure'
+        - script: |
+            echo "Showing files under current working directory:"
+            find . -type f
+          displayName: 'Debug: Show all files'
+
 
 # 5. Build Docker Image
 - stage: DockerBuild
@@ -103,7 +112,9 @@ stages:
           displayName: 'Build Docker Image'
           inputs:
             command: 'build'
-            Dockerfile: '**/Dockerfile'
+            dockerfile: 'ConsoleApp/ConsoleApp/Dockerfile'
+            buildContext: 'ConsoleApp/ConsoleApp'
+
             tags: |
               $(dockerImageName):$(Build.BuildId)
 
@@ -120,7 +131,7 @@ stages:
           displayName: 'Login to Docker Hub'
           inputs:
             command: 'login'
-            containerRegistry: 'dockersc1'  # <-- Create in Azure DevOps
+            containerRegistry: 'dockersc'  # <-- Create in Azure DevOps
 
         - task: Docker@2
           displayName: 'Push Image to Docker Hub'
@@ -142,7 +153,7 @@ stages:
           displayName: 'Login to ACR'
           inputs:
             command: 'login'
-            containerRegistry: 'acrsc1'  # <-- Create in Azure DevOps
+            containerRegistry: 'acrsc'  # <-- Create in Azure DevOps
 
         - task: Docker@2
           displayName: 'Push Image to ACR'
