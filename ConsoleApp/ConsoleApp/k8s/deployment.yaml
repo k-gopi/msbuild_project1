@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consoleapp-deployment
+  labels:
+    app: consoleapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consoleapp
+  template:
+    metadata:
+      labels:
+        app: consoleapp
+    spec:
+      containers:
+      - name: consoleapp
+        image: acr1regstry.azurecr.io/consoleapp:$(imageTag)  # use your ACR image path
+        ports:
+        - containerPort: 80
+        env:
+          - name: ASPNETCORE_ENVIRONMENT
+            value: "Production"
