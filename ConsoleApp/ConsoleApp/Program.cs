@@ -1,15 +1,7 @@
-﻿using System;
+﻿var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
 
-namespace ConsoleApp
-{
-    public class Program
-    {
-        public static void Main()
-        {
-            Console.WriteLine("Hello World! welcome to gopi");
+// Respond to HTTP GET /
+app.MapGet("/", () => "Hello World! welcome to gopi");
 
-            // Add this line to keep the app running and prevent container exit
-            Console.ReadLine();
-        }
-    }
-}
+app.Run();
