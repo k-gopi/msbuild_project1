@@ -1,15 +1,15 @@
-trigger:
-  branches:
-    include:
-      - master
+trigger: none
+  # branches:
+  #   include:
+  #     - master
 
 variables:
   buildConfiguration: 'Release'
   ImageName: 'consoleapp'
   imageTag: '$(Build.BuildId)'
   dockerHubRepo: 'docker630/consoleapp'  # <-- Change this
-  acrLoginServer: 'acr1regstry.azurecr.io'            # <-- Change this
-  acrRepo: 'acr1regstry.azurecr.io/consoleapp'       # <-- Change this
+  acrLoginServer: 'acr1registry.azurecr.io'            # <-- Change this
+  acrRepo: 'acr1registry.azurecr.io/consoleapp'       # <-- Change this
 
 stages:
 
@@ -108,7 +108,7 @@ stages:
       steps:
         - script: |
             echo "Building image..."
-            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
+            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile1 ConsoleApp/ConsoleApp
             echo "Tagging image..."
             docker tag $(imageName):$(imageTag) $(acrRepo):$(imageTag)
             docker images
