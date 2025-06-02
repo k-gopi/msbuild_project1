@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: consoleapp
-        image: acr1regstry.azurecr.io/consoleapp:278  # use your ACR image path
+        image: acr1registry.azurecr.io/consoleapp:282  # use your ACR image path
         ports:
         - containerPort: 80
