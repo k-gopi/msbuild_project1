@@ -1,16 +1,18 @@
-# Stage 1: Build
-FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
+FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
 WORKDIR /app
+EXPOSE 80
 
-COPY *.csproj ./
-RUN dotnet restore
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+WORKDIR /src
+COPY ["ConsoleApp/ConsoleApp.csproj", "./"]
+RUN dotnet restore "./ConsoleApp.csproj"
+COPY . .
+RUN dotnet build "./ConsoleApp.csproj" -c Release -o /app/build
 
-COPY . ./
-RUN dotnet publish -c Release -o /out
+FROM build AS publish
+RUN dotnet publish "./ConsoleApp.csproj" -c Release -o /app/publish
 
-# Stage 2: Runtime
-FROM mcr.microsoft.com/dotnet/runtime:7.0
+FROM base AS final
 WORKDIR /app
-COPY --from=build /out .
-
+COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "ConsoleApp.dll"]

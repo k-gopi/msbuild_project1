@@ -108,7 +108,7 @@ stages:
       steps:
         - script: |
             echo "Building image..."
-            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile1 ConsoleApp/ConsoleApp
+            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
             echo "Tagging image..."
             docker tag $(imageName):$(imageTag) $(acrRepo):$(imageTag)
             docker images
