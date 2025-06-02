@@ -8,8 +8,8 @@ variables:
   ImageName: 'consoleapp'
   imageTag: '$(Build.BuildId)'
   dockerHubRepo: 'docker630/consoleapp'  # <-- Change this
-  acrLoginServer: 'acr1eistry.azurecr.io'            # <-- Change this
-  acrRepo: 'acr1eistry.azurecr.io/consoleapp'       # <-- Change this
+  acrLoginServer: 'acr1regstry.azurecr.io'            # <-- Change this
+  acrRepo: 'acr1regstry.azurecr.io/consoleapp'       # <-- Change this
 
 stages:
 

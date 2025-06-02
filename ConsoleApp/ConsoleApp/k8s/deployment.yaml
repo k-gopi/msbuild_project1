@@ -16,9 +16,6 @@ spec:
     spec:
       containers:
       - name: consoleapp
-        image: acr1regstry.azurecr.io/consoleapp:$(imageTag)  # use your ACR image path
+        image: acr1regstry.azurecr.io/consoleapp:278  # use your ACR image path
         ports:
         - containerPort: 80
-        env:
-          - name: ASPNETCORE_ENVIRONMENT
-            value: "Production"
