@@ -6,7 +6,10 @@ namespace ConsoleApp
     {
         public static void Main()
         {
-            Console.WriteLine("Hello World! from Thetips4you");
+            Console.WriteLine("Hello World! welcome to gopi");
+
+            // Add this line to keep the app running and prevent container exit
+            Console.ReadLine();
         }
     }
 }

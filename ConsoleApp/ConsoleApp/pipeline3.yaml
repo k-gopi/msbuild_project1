@@ -1,15 +1,12 @@
 trigger: none
-  # branches:
-  #   include:
-  #     - master
 
 variables:
   buildConfiguration: 'Release'
   ImageName: 'consoleapp'
   imageTag: '$(Build.BuildId)'
-  dockerHubRepo: 'docker630/consoleapp'  # <-- Change this
-  acrLoginServer: 'acr1registry.azurecr.io'            # <-- Change this
-  acrRepo: 'acr1registry.azurecr.io/consoleapp'       # <-- Change this
+  dockerHubRepo: 'docker630/consoleapp'
+  acrLoginServer: 'acr1registry.azurecr.io'
+  acrRepo: 'acr1registry.azurecr.io/consoleapp'
 
 stages:
 
@@ -25,11 +22,11 @@ stages:
           inputs:
             packageType: 'sdk'
             version: '6.0.x'
+
         - script: |
             echo "Listing project files:"
             find $(Build.SourcesDirectory) -name '*.csproj'
           displayName: 'Find .csproj file'
-      
 
         - task: DotNetCoreCLI@2
           displayName: 'Restore Packages'
@@ -90,34 +87,14 @@ stages:
           inputs:
             pathToPublish: '$(Build.ArtifactStagingDirectory)'
             artifactName: 'consoleapp'
-        - script: |
-            echo "Listing directory structure:"
-            find . -type f
-          displayName: 'Debug File Structure'
-        - script: |
-            echo "Showing files under current working directory:"
-            find . -type f
-          displayName: 'Debug: Show all files'
 
-# 🛠️ 5. Build Docker Image
-- stage: DockerBuild
+# 5. Build and Push Docker Image
+- stage: DockerBuildAndPush
+  displayName: 'Build and Push Docker Image to ACR and Docker Hub'
+  dependsOn: Publish
   jobs:
-    - job: Build
-      pool:
-        name: 'consoleapppool'
-      steps:
-        - script: |
-            echo "Building image..."
-            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
-            echo "Tagging image..."
-            docker tag $(imageName):$(imageTag) $(acrRepo):$(imageTag)
-            docker images
-          displayName: 'Build and Tag Docker Image'
-# 1. Push to acr
-- stage: PushACR
-  dependsOn: DockerBuild
-  jobs:
-    - job: Push
+    - job: DockerPush
+      displayName: 'Build and Push Docker Image'
       pool:
         name: 'consoleapppool'
       steps:
@@ -125,41 +102,36 @@ stages:
           displayName: 'Login to ACR'
           inputs:
             command: login
-            containerRegistry: 'acrsc'  # replace with your actual ACR service connection name
+            containerRegistry: 'acrsc'  # Replace with your actual ACR service connection
 
-        - script: |
-            echo "Pushing image to ACR..."
-            docker push $(acrRepo):$(imageTag)
-          displayName: 'Push Docker Image to ACR'
-# 2. Push to Docker Hub
-- stage: PushToDockerHub
-  displayName: 'Push Image to Docker Hub'
-  dependsOn: DockerBuild
-  jobs:
-    - job: PushDockerHub
-      pool:
-        name: 'consoleapppool'
-      steps:
         - task: Docker@2
           displayName: 'Login to Docker Hub'
           inputs:
             command: login
-            containerRegistry: 'dockersc'
+            containerRegistry: 'dockersc'  # Replace with your Docker Hub service connection
 
         - script: |
-            echo "Tagging image for Docker Hub..."
-            docker tag $(imageName):$(imageTag) $(dockerHubRepo):$(imageTag)
-            docker images
-          displayName: 'Tag Image for Docker Hub'
+            echo "Building image..."
+            docker build -t $(ImageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
 
-        - script: |
+            echo "Tagging for ACR..."
+            docker tag $(ImageName):$(imageTag) $(acrRepo):$(imageTag)
+
+            echo "Tagging for Docker Hub..."
+            docker tag $(ImageName):$(imageTag) $(dockerHubRepo):$(imageTag)
+
+            echo "Pushing to ACR..."
+            docker push $(acrRepo):$(imageTag)
+
             echo "Pushing to Docker Hub..."
             docker push $(dockerHubRepo):$(imageTag)
-          displayName: 'Push Docker Image to Docker Hub'
-#deploy to aks
+          displayName: 'Build, Tag and Push Docker Image'
+
+
+# 6. Deploy to AKS
 - stage: DeployToAKS
   displayName: 'Deploy to AKS'
-  dependsOn: PushToDockerHub
+  dependsOn: DockerBuildAndPush
   jobs:
     - job: Deploy
       pool:
@@ -168,18 +140,13 @@ stages:
         - task: AzureCLI@2
           displayName: 'Deploy to AKS using kubectl'
           inputs:
-            azureSubscription: 'armsc'  # Replace with your Azure service connection name
+            azureSubscription: 'armsc'  # Replace with your Azure RM service connection
             scriptType: bash
             scriptLocation: inlineScript
             inlineScript: |
+              echo "Getting AKS credentials..."
               az aks get-credentials --resource-group consoleapp-rg --name aks-dev-cluster --overwrite-existing
-              
-              # Apply deployment and service manifests
+
+              echo "Deploying to AKS..."
               kubectl apply -f ConsoleApp/ConsoleApp/k8s/deployment.yaml
               kubectl apply -f ConsoleApp/ConsoleApp/k8s/service.yaml
-
-
-        
-           
-
-
