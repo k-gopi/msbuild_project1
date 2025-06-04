@@ -14,7 +14,7 @@ spec:
         app: consoleapp
     spec:
       containers:
-      - name: consoleapp
-        image: acr1registry.azurecr.io/consoleapp:299
-        ports:
-        - containerPort: 80
+        - name: consoleapp
+          image: acr1registry.azurecr.io/consoleapp:latest  # This gets replaced by sed in pipeline
+          ports:
+            - containerPort: 80
