@@ -1,11 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: consoleapp-deployment
-  labels:
-    app: consoleapp
+  name: consoleapp
+  namespace: consoleapp-ns
 spec:
-  replicas: 1
+  replicas: 2
   selector:
     matchLabels:
       app: consoleapp
@@ -16,6 +15,6 @@ spec:
     spec:
       containers:
       - name: consoleapp
-        image: acr1registry.azurecr.io/consoleapp:289 # use your ACR image path
+        image: acr1registry.azurecr.io/consoleapp:latest
         ports:
         - containerPort: 80
