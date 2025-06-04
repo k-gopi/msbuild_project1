@@ -4,9 +4,9 @@ metadata:
   name: consoleapp-service
   namespace: consoleapp-ns
 spec:
-  type: LoadBalancer
   selector:
     app: consoleapp
+  type: LoadBalancer
   ports:
     - protocol: TCP
       port: 80
