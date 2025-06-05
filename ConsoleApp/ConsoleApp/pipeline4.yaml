@@ -1,12 +1,18 @@
 trigger: none
+  # branches:
+  #   include:
+  #     - main
 
 variables:
   buildConfiguration: 'Release'
-  ImageName: 'consoleapp'
+  imageName: 'consoleapp'
   imageTag: '$(Build.BuildId)'
-  dockerHubRepo: 'docker630/consoleapp'
   acrLoginServer: 'acr1registry.azurecr.io'
   acrRepo: 'acr1registry.azurecr.io/consoleapp'
+  dockerHubRepo: 'docker630/consoleapp'
+  aksResourceGroup: 'consoleapp-rg'
+  aksClusterName: 'aks-dev-cluster'
+  namespace: 'consoleapp-dev'
 
 stages:
 
@@ -22,11 +28,6 @@ stages:
           inputs:
             packageType: 'sdk'
             version: '6.0.x'
-
-        - script: |
-            echo "Listing project files:"
-            find $(Build.SourcesDirectory) -name '*.csproj'
-          displayName: 'Find .csproj file'
 
         - task: DotNetCoreCLI@2
           displayName: 'Restore Packages'
@@ -66,7 +67,7 @@ stages:
             projects: '**/*Tests.csproj'
             arguments: '--configuration $(buildConfiguration)'
 
-# 4. Publish Artifacts
+# 4. Publish
 - stage: Publish
   displayName: 'Publish Artifacts'
   dependsOn: Test
@@ -79,22 +80,15 @@ stages:
           displayName: 'Publish App'
           inputs:
             command: 'publish'
-            publishWebProjects: false
             projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
             arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
 
-        - task: PublishBuildArtifacts@1
-          inputs:
-            pathToPublish: '$(Build.ArtifactStagingDirectory)'
-            artifactName: 'consoleapp'
-
-# 5. Build and Push Docker Image
+# 5. Docker Build and Push to ACR + Docker Hub
 - stage: DockerBuildAndPush
   displayName: 'Build and Push Docker Image to ACR and Docker Hub'
   dependsOn: Publish
   jobs:
     - job: DockerPush
-      displayName: 'Build and Push Docker Image'
       pool:
         name: 'consoleapppool'
       steps:
@@ -102,30 +96,30 @@ stages:
           displayName: 'Login to ACR'
           inputs:
             command: login
-            containerRegistry: 'acrsc'  # ACR service connection
+            containerRegistry: 'acrsc'
 
         - task: Docker@2
           displayName: 'Login to Docker Hub'
           inputs:
             command: login
-            containerRegistry: 'dockersc'  # DockerHub service connection
+            containerRegistry: 'dockersc'
 
         - script: |
-            echo "Building image..."
-            docker build -t $(ImageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
+            echo "Building Docker image..."
+            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
 
             echo "Tagging for ACR..."
-            docker tag $(ImageName):$(imageTag) $(acrRepo):$(imageTag)
+            docker tag $(imageName):$(imageTag) $(acrRepo):$(imageTag)
 
             echo "Tagging for Docker Hub..."
-            docker tag $(ImageName):$(imageTag) $(dockerHubRepo):$(imageTag)
+            docker tag $(imageName):$(imageTag) $(dockerHubRepo):$(imageTag)
 
             echo "Pushing to ACR..."
             docker push $(acrRepo):$(imageTag)
 
             echo "Pushing to Docker Hub..."
             docker push $(dockerHubRepo):$(imageTag)
-          displayName: 'Build, Tag and Push Docker Image'
+          displayName: 'Build, Tag, and Push Docker Image'
 
 # 6. Deploy to AKS
 - stage: DeployToAKS
@@ -137,21 +131,24 @@ stages:
         name: 'consoleapppool'
       steps:
         - task: AzureCLI@2
-          displayName: 'Deploy to AKS using kubectl'
+          displayName: 'Configure AKS and Deploy App'
           inputs:
-            azureSubscription: 'armsc'  # Azure RM service connection
+            azureSubscription: 'armsc'
             scriptType: bash
             scriptLocation: inlineScript
             inlineScript: |
-              echo "Getting AKS credentials..."
-              az aks get-credentials --resource-group consoleapp-rg --name aks-dev-cluster --overwrite-existing
+              echo "Get AKS credentials..."
+              az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksClusterName) --overwrite-existing
 
-              echo "Creating namespace if not exists..."
+              echo "Attach ACR to AKS (if not already)..."
+              az aks update -n $(aksClusterName) -g $(aksResourceGroup) --attach-acr $(acrLoginServer)
+
+              echo "Create namespace if not exists..."
               kubectl apply -f ConsoleApp/ConsoleApp/k8s/namespace.yaml
 
-              echo "Updating deployment image..."
-              kubectl set image deployment/consoleapp consoleapp=$(acrRepo):$(imageTag) -n consoleapp-ns || \
-              kubectl apply -f ConsoleApp/ConsoleApp/k8s/deployment.yaml
+              echo "Substitute image tag in deployment..."
+              sed "s|__IMAGE_TAG__|$(Build.BuildId)|g" ConsoleApp/ConsoleApp/k8s/deployment.yaml > deployment-patched.yaml
 
-              echo "Applying service..."
+              echo "Deploying to AKS..."
+              kubectl apply -f deployment-patched.yaml
               kubectl apply -f ConsoleApp/ConsoleApp/k8s/service.yaml
