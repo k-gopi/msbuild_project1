@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consoleapp-deployment
+  namespace: consoleapp-dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: consoleapp
+  template:
+    metadata:
+      labels:
+        app: consoleapp
+    spec:
+      nodeSelector:
+        agentpool: usernodepool  # Ensure this matches your AKS node pool name
+      containers:
+      - name: consoleapp
+        image: acr1registry.azurecr.io/consoleapp:__IMAGE_TAG__
+        ports:
+        - containerPort: 80

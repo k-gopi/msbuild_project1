@@ -1,0 +1,144 @@
+trigger: none
+
+variables:
+  buildConfiguration: 'Release'
+  imageName: 'consoleapp'
+  imageTag: '$(Build.BuildId)'
+  acrLoginServer: 'acr1registry.azurecr.io'
+  acrRepo: 'acr1registry.azurecr.io/consoleapp'
+  dockerHubRepo: 'docker630/consoleapp'
+  aksResourceGroup: 'consoleapp-rg'
+  aksClusterName: 'aks-dev-cluster'
+  namespace: 'consoleapp-dev'
+  nodePool: 'usernodepool'
+
+stages:
+
+# 1. Restore
+- stage: Restore
+  displayName: 'Restore NuGet Packages'
+  jobs:
+    - job: Restore
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: '6.0.x'
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore Packages'
+          inputs:
+            command: 'restore'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+
+# 2. Build
+- stage: Build
+  displayName: 'Build .NET App'
+  dependsOn: Restore
+  jobs:
+    - job: Build
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Build Solution'
+          inputs:
+            command: 'build'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+# 3. Test
+- stage: Test
+  displayName: 'Run Unit Tests'
+  dependsOn: Build
+  jobs:
+    - job: Test
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Run Tests'
+          inputs:
+            command: 'test'
+            projects: '**/*Tests.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+# 4. Publish
+- stage: Publish
+  displayName: 'Publish Artifacts'
+  dependsOn: Test
+  jobs:
+    - job: Publish
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Publish App'
+          inputs:
+            command: 'publish'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+            arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+
+# 5. Docker Build and Push
+- stage: DockerBuildAndPush
+  displayName: 'Build and Push Docker Image'
+  dependsOn: Publish
+  jobs:
+    - job: DockerPush
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: Docker@2
+          displayName: 'Login to ACR'
+          inputs:
+            command: login
+            containerRegistry: 'acrsc'
+        - task: Docker@2
+          displayName: 'Login to Docker Hub'
+          inputs:
+            command: login
+            containerRegistry: 'dockersc'
+        - script: |
+            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
+            docker tag $(imageName):$(imageTag) $(acrRepo):$(imageTag)
+            docker tag $(imageName):$(imageTag) $(dockerHubRepo):$(imageTag)
+            docker push $(acrRepo):$(imageTag)
+            docker push $(dockerHubRepo):$(imageTag)
+          displayName: 'Build, Tag, and Push Image'
+
+# 6. Deploy to AKS
+- stage: DeployToAKS
+  displayName: 'Deploy to AKS'
+  dependsOn: DockerBuildAndPush
+  jobs:
+    - deployment: Deploy
+      environment: 'consoleapp-dev'  # Azure DevOps environment name
+      pool:
+        name: 'consoleapppool'
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - task: AzureCLI@2
+                displayName: 'Deploy to AKS'
+                inputs:
+                  azureSubscription: 'armsc'
+                  scriptType: bash
+                  scriptLocation: inlineScript
+                  inlineScript: |
+                    echo "Getting AKS credentials..."
+                    az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksClusterName) --overwrite-existing
+
+                    echo "Attach ACR to AKS..."
+                    az aks update -n $(aksClusterName) -g $(aksResourceGroup) --attach-acr $(acrLoginServer)
+
+                    echo "Create namespace if not exists..."
+                    kubectl apply -f ConsoleApp/ConsoleApp/k8s/namespace2.yaml
+
+                    echo "Patching deployment YAML..."
+                    sed "s|__IMAGE_TAG__|$(Build.BuildId)|g" ConsoleApp/ConsoleApp/k8s/deployment2.yaml > deployment2-patched.yaml
+
+                    echo "Deploying to AKS..."
+                    kubectl apply -f deployment2-patched.yaml
+                    kubectl apply -f ConsoleApp/ConsoleApp/k8s/service2.yaml
