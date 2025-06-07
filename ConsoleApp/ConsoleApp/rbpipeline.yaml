@@ -4,6 +4,7 @@ parameters:
   - name: imageTag
     displayName: 'Image Tag to Rollback'
     type: string
+    default: '310'  # 👉  tag specify 
   - name: namespace
     displayName: 'Kubernetes Namespace'
     type: string
