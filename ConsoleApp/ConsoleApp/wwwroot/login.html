@@ -6,12 +6,19 @@
 <body>
     <h2>Login</h2>
     <form method="post" action="/login">
+        <!-- Username -->
         <label for="username">Username:</label><br>
-        <input type="text" id="username" name="username"><br><br>
+        <input type="text" id="username" name="username" required><br><br>
 
+        <!-- Email -->
+        <label for="email">Email:</label><br>
+        <input type="email" id="email" name="email" required><br><br>
+
+        <!-- Password -->
         <label for="password">Password:</label><br>
-        <input type="password" id="password" name="password"><br><br>
+        <input type="password" id="password" name="password" required><br><br>
 
+        <!-- Submit Button -->
         <button type="submit">Login</button>
     </form>
 </body>

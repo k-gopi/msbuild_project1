@@ -28,10 +28,11 @@ app.MapPost("/login", async (HttpContext context) =>
 {
     var form = await context.Request.ReadFormAsync();
     var username = form["username"];
+    var email = form["email"];
     var password = form["password"];
 
-    // Dummy login validation
-    if (username == "admin" && password == "pass123")
+    // Dummy login validation (you can modify this logic as needed)
+    if (username == "admin" && password == "pass123" && email == "admin@example.com")
     {
         return Results.Ok("✅ Login successful!");
     }
