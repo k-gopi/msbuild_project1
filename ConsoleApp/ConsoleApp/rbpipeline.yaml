@@ -1,0 +1,47 @@
+trigger: none
+
+parameters:
+  - name: imageTag
+    displayName: 'Image Tag to Rollback'
+    type: string
+  - name: namespace
+    displayName: 'Kubernetes Namespace'
+    type: string
+    default: 'consoleapp-dev'
+
+variables:
+  acrLoginServer: 'acr1registry.azurecr.io'
+  acrRepo: 'acr1registry.azurecr.io/consoleapp'
+  aksResourceGroup: 'consoleapp-rg'
+  aksClusterName: 'aks-dev-cluster'
+
+stages:
+- stage: Rollback
+  displayName: 'Rollback to Previous Version'
+  jobs:
+    - job: RollbackJob
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: AzureCLI@2
+          displayName: 'Rollback Deployment in AKS'
+          inputs:
+            azureSubscription: 'armsc'
+            scriptType: bash
+            scriptLocation: inlineScript
+            inlineScript: |
+              echo "Getting AKS credentials..."
+              az aks get-credentials --resource-group $(aksResourceGroup) --name $(aksClusterName) --overwrite-existing
+
+              echo "Attaching ACR (if not already attached)..."
+              az aks update -n $(aksClusterName) -g $(aksResourceGroup) --attach-acr $(acrLoginServer)
+
+              echo "Ensuring namespace exists..."
+              kubectl apply -f ConsoleApp/ConsoleApp/k8s/namespace2.yaml
+
+              echo "Patching deployment YAML with rollback tag: ${{ parameters.imageTag }}"
+              sed "s|__IMAGE_TAG__|${{ parameters.imageTag }}|g" ConsoleApp/ConsoleApp/k8s/deployment2.yaml > deployment2-rollback.yaml
+
+              echo "Rolling back to image tag: ${{ parameters.imageTag }}"
+              kubectl apply -f deployment2-rollback.yaml
+              kubectl apply -f ConsoleApp/ConsoleApp/k8s/service2.yaml
