@@ -1,0 +1,45 @@
+trigger: none
+
+parameters:
+  - name: rollbackBuildId
+    type: string
+    default: '320'
+
+variables:
+  imageName: 'consoleapp'
+  acrLoginServer: 'acr1registry.azurecr.io'
+  acrRepo: 'acr1registry.azurecr.io/consoleapp'
+  acrUsername: '$(acr-username)'
+  acrPassword: '$(acr-password)'
+
+stages:
+- stage: Rollback
+  displayName: 'Rollback to Previous Build'
+  condition: and(succeeded(), ne('${{ parameters.rollbackBuildId }}', ''))
+  jobs:
+    - job: DeployRollback
+      displayName: 'Deploy Previous Build to Linux Server'
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: SSH@0
+          displayName: 'SSH and Rollback Deployment'
+          inputs:
+            sshEndpoint: 'linuxssh'
+            runOptions: 'inline'
+            inline: |
+              echo "Logging into ACR..."
+              echo $(acrPassword) | docker login $(acrLoginServer) -u $(acrUsername) --password-stdin
+
+              echo "Stopping old container..."
+              docker stop consoleapp || true
+              docker rm consoleapp || true
+
+              echo "Pulling old image with tag: ${{ parameters.rollbackBuildId }}"
+              docker pull $(acrRepo):${{ parameters.rollbackBuildId }}
+
+              echo "Running container with old image..."
+              docker run -d --name consoleapp -p 8080:80 $(acrRepo):${{ parameters.rollbackBuildId }}
+          env:
+            ACR_USERNAME: $(acr-username)
+            ACR_PASSWORD: $(acr-password)
