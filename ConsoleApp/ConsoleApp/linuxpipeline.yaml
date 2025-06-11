@@ -1,0 +1,110 @@
+trigger: none
+
+variables:
+  buildConfiguration: 'Release'
+  imageName: 'consoleapp'
+  imageTag: '$(Build.BuildId)'
+  acrLoginServer: 'acr1registry.azurecr.io'
+  acrRepo: 'acr1registry.azurecr.io/consoleapp'
+  acrUsername: '$(acr-username)'      # set in DevOps variable group as secret
+  acrPassword: '$(acr-password)'      # set in DevOps variable group as secret
+
+stages:
+
+# 1. Restore
+- stage: Restore
+  displayName: 'Restore NuGet Packages'
+  jobs:
+    - job: Restore
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: UseDotNet@2
+          inputs:
+            packageType: 'sdk'
+            version: '6.0.x'
+        - task: DotNetCoreCLI@2
+          displayName: 'Restore'
+          inputs:
+            command: 'restore'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+
+# 2. Build
+- stage: Build
+  displayName: 'Build .NET App'
+  dependsOn: Restore
+  jobs:
+    - job: Build
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Build App'
+          inputs:
+            command: 'build'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+            arguments: '--configuration $(buildConfiguration)'
+
+# 3. Publish
+- stage: Publish
+  displayName: 'Publish Output'
+  dependsOn: Build
+  jobs:
+    - job: Publish
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: DotNetCoreCLI@2
+          displayName: 'Publish'
+          inputs:
+            command: 'publish'
+            projects: 'ConsoleApp/ConsoleApp/ConsoleApp.csproj'
+            arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)'
+
+# 4. Docker Build & Push to ACR
+- stage: DockerBuildPush
+  displayName: 'Docker Build and Push to ACR'
+  dependsOn: Publish
+  jobs:
+    - job: DockerPush
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: Docker@2
+          displayName: 'Login to ACR'
+          inputs:
+            command: login
+            containerRegistry: 'acrsc'  # ACR service connection
+        - script: |
+            docker build -t $(imageName):$(imageTag) -f ConsoleApp/ConsoleApp/Dockerfile ConsoleApp/ConsoleApp
+            docker tag $(imageName):$(imageTag) $(acrRepo):$(imageTag)
+            docker push $(acrRepo):$(imageTag)
+          displayName: 'Build and Push Image to ACR'
+
+# 5. Deploy to Linux Server (from ACR)
+- stage: DeployToLinux
+  displayName: 'Deploy from ACR to Linux Server'
+  dependsOn: DockerBuildPush
+  jobs:
+    - job: Deploy
+      pool:
+        name: 'consoleapppool'
+      steps:
+        - task: SSH@0
+          displayName: 'SSH and Deploy on Linux Server'
+          inputs:
+            sshEndpoint: 'linuxssh'  # you must configure this in DevOps service connections
+            runOptions: 'inline'
+            inline: |
+              echo "Logging into ACR from Linux server..."
+              docker login $(acrLoginServer) -u $(acrUsername) -p $(acrPassword)
+
+              echo "Stopping old container if running..."
+              docker stop consoleapp || true
+              docker rm consoleapp || true
+
+              echo "Pulling image from ACR..."
+              docker pull $(acrRepo):$(imageTag)
+
+              echo "Running new container..."
+              docker run -d --name consoleapp -p 8080:80 $(acrRepo):$(imageTag)
