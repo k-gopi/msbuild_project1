@@ -1,13 +1,14 @@
 trigger: none
+# - main  # Trigger on changes to the main branch
 
 variables:
   buildConfiguration: 'Release'
   imageName: 'consoleapp'
-  imageTag: '$(Build.BuildId)'
+  imageTag: '$(Build.BuildId)'  # Use BuildId as the Docker image tag
   acrLoginServer: 'acr1registry.azurecr.io'
   acrRepo: 'acr1registry.azurecr.io/consoleapp'
-  acrUsername: '$(acr-username)'      # set in DevOps variable group as secret
-  acrPassword: '$(acr-password)'      # set in DevOps variable group as secret
+  acrUsername: '$(acr-username)'      # This should be set as a secret variable in DevOps
+  acrPassword: '$(acr-password)'      # This should also be a secret variable in DevOps
 
 stages:
 
@@ -93,18 +94,27 @@ stages:
         - task: SSH@0
           displayName: 'SSH and Deploy on Linux Server'
           inputs:
-            sshEndpoint: 'linuxssh'  # you must configure this in DevOps service connections
+            sshEndpoint: 'linuxssh'  # Ensure you have configured this SSH service connection in Azure DevOps
             runOptions: 'inline'
             inline: |
               echo "Logging into ACR from Linux server..."
-              docker login $(acrLoginServer) -u $(acrUsername) -p $(acrPassword)
+              # Using the secret variables for login to ACR
+              echo $(acrPassword) | docker login $(acrLoginServer) -u $(acrUsername) --password-stdin
 
+              # Check if the 'consoleapp' container is running, then stop and remove if it exists
               echo "Stopping old container if running..."
-              docker stop consoleapp || true
-              docker rm consoleapp || true
+              if [ $(docker ps -q -f name=consoleapp) ]; then
+                docker stop consoleapp
+                docker rm consoleapp
+              fi
 
+              # Pull the latest image from ACR
               echo "Pulling image from ACR..."
               docker pull $(acrRepo):$(imageTag)
 
+              # Run the new container
               echo "Running new container..."
               docker run -d --name consoleapp -p 8080:80 $(acrRepo):$(imageTag)
+          env:
+            ACR_USERNAME: $(acr-username)   # Use these secret variables securely
+            ACR_PASSWORD: $(acr-password)   # Use these secret variables securely
